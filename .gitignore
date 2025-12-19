@@ -12,7 +12,7 @@ dist/
 build/
 .eggs/
 wandb/
-data/
+/data/
 *.log
 .DS_Store
 .env
