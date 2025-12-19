@@ -16,8 +16,8 @@ from flax import nnx
 
 from src.denomae.model import DenoMAE
 from src.denomae.mesh_utils import create_device_mesh, DataParallelTrainer, print_mesh_info
-from src.data.datagen import DenoMAEDataset, create_data_loader
-from src.data.huggingface_utils import HuggingFaceDataLoader
+from src.data.datagen import DenoMAEDataset, create_dataloader
+from src.data.huggingface_utils import stream_multimodal_from_hub
 from src.training.trainer import (
     create_train_state,
     train_epoch,
@@ -148,22 +148,24 @@ def main():
     if args.hf_dataset:
         # Use HuggingFace streaming
         print(f"Using HuggingFace dataset: {args.hf_dataset}")
-        train_loader = HuggingFaceDataLoader(
-            repo_id=args.hf_dataset,
-            split='train',
-            dataset_type='unlabeled',
-            num_modalities=args.num_modality,
-            image_size=tuple(args.image_size),
-            batch_size=args.batch_size
-        )
-        test_loader = HuggingFaceDataLoader(
-            repo_id=args.hf_dataset,
-            split='test',
-            dataset_type='unlabeled',
-            num_modalities=args.num_modality,
-            image_size=tuple(args.image_size),
-            batch_size=args.batch_size
-        )
+        
+        def get_train_loader():
+            return stream_multimodal_from_hub(
+                repo_id=args.hf_dataset,
+                split='train',
+                batch_size=args.batch_size,
+                num_modalities=args.num_modality,
+                image_size=tuple(args.image_size)
+            )
+        
+        def get_test_loader():
+            return stream_multimodal_from_hub(
+                repo_id=args.hf_dataset,
+                split='test',
+                batch_size=args.batch_size,
+                num_modalities=args.num_modality,
+                image_size=tuple(args.image_size)
+            )
     else:
         # Use local data
         train_config = {
@@ -194,10 +196,10 @@ def main():
         )
         
         def get_train_loader():
-            return create_data_loader(train_dataset, args.batch_size, shuffle=True)
+            return create_dataloader(train_dataset, args.batch_size, shuffle=True)
         
         def get_test_loader():
-            return create_data_loader(test_dataset, args.batch_size, shuffle=False)
+            return create_dataloader(test_dataset, args.batch_size, shuffle=False)
     
     # Initialize WandB
     config = vars(args)
@@ -216,8 +218,8 @@ def main():
             
             # Get fresh iterators
             if args.hf_dataset:
-                train_iter = iter(train_loader)
-                test_iter = iter(test_loader)
+                train_iter = get_train_loader()
+                test_iter = get_test_loader()
             else:
                 train_iter = get_train_loader()
                 test_iter = get_test_loader()
