@@ -263,12 +263,15 @@ class DenoMAE(nnx.Module):
                 (batch_size, self.n_patches, self.patch_size, self.patch_size, self.in_chans)
             )
             
-            # Fill in the kept positions
+            # Fill in the kept positions (in shuffled order)
             full_rec = full_rec.at[:, :n_keep].set(rec)
             
-            # Unshuffle to original order
+            # Unshuffle to original order using ids_restore
+            # ids_restore contains indices that would unshuffle the patches back to original order
             def unshuffle_rec(rec_single, ids):
-                return rec_single[jnp.argsort(ids)]
+                # ids is ids_restore which contains the original position for each shuffled position
+                # We need to index with the argsort of ids_restore to move patches back
+                return rec_single[ids]
             
             full_rec = jax.vmap(unshuffle_rec)(full_rec, ids_restores[i])
             
