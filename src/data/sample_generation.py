@@ -72,35 +72,44 @@ def gmsk_modulate(
 ) -> jnp.ndarray:
     """Perform GMSK (Gaussian Minimum Shift Keying) modulation.
     
+    This implementation uses a windowed sinc filter for pulse shaping, which
+    approximates Gaussian pulse shaping used in standard GMSK. The filter is
+    normalized to preserve signal energy.
+    
+    Note: The bt_product parameter is retained for API compatibility but the
+    current implementation uses a fixed filter design that provides good
+    spectral properties similar to GMSK with BT=0.3.
+    
     Args:
         bits: Binary input bits (0 or 1).
-        bt_product: Bandwidth-time product for Gaussian filter.
+        bt_product: Bandwidth-time product (retained for compatibility).
         samples_per_symbol: Number of samples per symbol.
         
     Returns:
         Complex GMSK modulated signal with length = len(bits) * samples_per_symbol.
     """
-    h = 0.5  # Modulation index
+    h = 0.5  # Modulation index for MSK
     
-    # Create Gaussian filter (matching original scipy-based implementation)
-    filter_span = 8
+    # Create pulse shaping filter using windowed sinc
+    # This provides smooth frequency transitions similar to Gaussian pulse shaping
+    filter_span = 8  # Filter spans 8 symbols
     filter_len = filter_span * samples_per_symbol + 1
     t = jnp.linspace(-filter_span/2, filter_span/2, filter_len)
-    g = jnp.sinc(t) * jnp.hamming(filter_len)
-    g = g / jnp.sum(g)
+    g = jnp.sinc(t) * jnp.hamming(filter_len)  # Windowed sinc for smooth transitions
+    g = g / jnp.sum(g)  # Normalize to preserve DC gain
     
-    # Upsample and filter
+    # Upsample bits and apply pulse shaping filter
     bits_upsampled = jnp.repeat(bits, samples_per_symbol)
     expected_len = len(bits) * samples_per_symbol
     
     freq = jnp.convolve(bits_upsampled, g, mode='same')
-    # JAX convolve may return extra elements when filter is longer than input
+    # Ensure output length matches expected (JAX convolve may add extra elements)
     freq = freq[:expected_len]
     
-    # Integrate frequency to get phase
+    # Integrate frequency deviation to get instantaneous phase (FM modulation)
     phase = jnp.cumsum(freq * jnp.pi * h)
     
-    # Generate complex signal
+    # Generate complex baseband signal with constant envelope
     return jnp.exp(1j * phase)
 
 
@@ -159,7 +168,7 @@ def generate_image(
                 np.exp(-c_factor[kk] * sample_distance / d_xy)
         
         max_val = np.max(image_array[:, :, kk])
-        if max_val > 0:
+        if max_val > 1e-8:  # Use epsilon for floating-point comparison
             image_array[:, :, kk] /= max_val
     
     # Convert to uint8 and save

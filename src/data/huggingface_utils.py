@@ -281,8 +281,18 @@ def _process_modality_data(
             # Reshape 1D signal to 2D
             target_length = image_size[0] * image_size[1]
             if len(arr) != target_length:
-                x = np.linspace(0, len(arr) - 1, target_length)
-                arr = np.interp(x, np.arange(len(arr)), arr.real)
+                x_new = np.linspace(0, len(arr) - 1, target_length)
+                x_old = np.arange(len(arr))
+                if np.iscomplexobj(arr):
+                    # Interpolate real and imaginary parts separately, then use magnitude
+                    real_interp = np.interp(x_new, x_old, arr.real)
+                    imag_interp = np.interp(x_new, x_old, arr.imag)
+                    arr = np.abs(real_interp + 1j * imag_interp)
+                else:
+                    arr = np.interp(x_new, x_old, arr.real)
+            else:
+                # Use magnitude for complex signals
+                arr = np.abs(arr) if np.iscomplexobj(arr) else arr.real
             arr = arr.reshape(image_size[0], image_size[1])
         arr = np.stack([arr] * 3, axis=0).astype(np.float32)
         return arr

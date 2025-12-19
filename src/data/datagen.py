@@ -95,11 +95,20 @@ class DenoMAEDataset:
         npy_data = np.load(path)
         
         # Interpolate to target length if needed
+        # Handle complex signals by interpolating real and imaginary parts separately
         if len(npy_data) != self.target_length:
-            x = np.linspace(0, len(npy_data) - 1, self.target_length)
-            npy_data = np.interp(x, np.arange(len(npy_data)), npy_data.real)
+            x_new = np.linspace(0, len(npy_data) - 1, self.target_length)
+            x_old = np.arange(len(npy_data))
+            if np.iscomplexobj(npy_data):
+                real_interp = np.interp(x_new, x_old, npy_data.real)
+                imag_interp = np.interp(x_new, x_old, npy_data.imag)
+                # Use magnitude for visualization
+                npy_data = np.abs(real_interp + 1j * imag_interp)
+            else:
+                npy_data = np.interp(x_new, x_old, npy_data.real)
         else:
-            npy_data = npy_data.real
+            # Use magnitude for complex signals
+            npy_data = np.abs(npy_data) if np.iscomplexobj(npy_data) else npy_data.real
         
         # Reshape to image format
         npy_data = npy_data.reshape(self.image_size[0], self.image_size[1])
